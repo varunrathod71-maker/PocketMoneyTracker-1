@@ -1,48 +1,50 @@
 name: Build Pocket Money Tracker APK
 
-on:
-workflow_dispatch:
-push:
+'on':
+  workflow_dispatch:
+  push:
 
 jobs:
-build:
-runs-on: ubuntu-latest
-steps:
-- name: Checkout repository
-uses: actions/checkout@v4
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Set up Java
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: '17'
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-  - name: Set up Android SDK
-    uses: android-actions/setup-android@v3
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-  - name: Set up Gradle
-    uses: gradle/actions/setup-gradle@v4
-    with:
-      gradle-version: '8.9'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-  - name: Find project ZIP
-    run: |
-      ZIP_FILE="$(find . -maxdepth 1 -type f -iname 'PocketMoneyTracker*.zip' -print -quit)"
-      if [ -z "$ZIP_FILE" ]; then
-        echo "No PocketMoneyTracker ZIP found in repository root."
-        exit 1
-      fi
-      mkdir project-src
-      unzip -q "$ZIP_FILE" -d project-src
-      test -f project-src/settings.gradle || test -f project-src/settings.gradle.kts
-      test -f project-src/app/build.gradle || test -f project-src/app/build.gradle.kts
+      - name: Find project ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname 'PocketMoneyTracker*.zip' -print -quit)"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No PocketMoneyTracker ZIP found in repository root."
+            exit 1
+          fi
+          mkdir project-src
+          unzip -q "$ZIP_FILE" -d project-src
+          test -f project-src/settings.gradle || test -f project-src/settings.gradle.kts
+          test -f project-src/app/build.gradle || test -f project-src/app/build.gradle.kts
 
-  - name: Build APK
-    run: gradle --no-daemon -p project-src :app:assembleDebug
+      - name: Build APK
+        run: gradle --no-daemon -p project-src :app:assembleDebug
 
-  - name: Upload APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: PocketMoneyTracker-debug-apk
-      path: project-src/app/build/outputs/apk/debug/*.apk
-      if-no-files-found: error
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketMoneyTracker-debug-apk
+          path: project-src/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
