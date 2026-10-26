@@ -1,14 +1,8 @@
 name: Build Pocket Money Tracker APK
 
-"on":
+on:
 workflow_dispatch:
 push:
-paths:
-- ".github/workflows/main.yml"
-- "*.zip"
-
-permissions:
-contents: read
 
 jobs:
 build:
@@ -17,45 +11,36 @@ steps:
 - name: Checkout repository
 uses: actions/checkout@v4
 
-  - name: Set up Java 17
+  - name: Set up Java
     uses: actions/setup-java@v4
     with:
       distribution: temurin
-      java-version: "17"
+      java-version: '17'
 
   - name: Set up Android SDK
     uses: android-actions/setup-android@v3
 
-  - name: Set up Gradle 8.9
+  - name: Set up Gradle
     uses: gradle/actions/setup-gradle@v4
     with:
-      gradle-version: "8.9"
+      gradle-version: '8.9'
 
-  - name: Find and extract project ZIP
-    shell: bash
+  - name: Find project ZIP
     run: |
-      set -euo pipefail
       ZIP_FILE="$(find . -maxdepth 1 -type f -iname 'PocketMoneyTracker*.zip' -print -quit)"
       if [ -z "$ZIP_FILE" ]; then
-        echo "ERROR: Upload the PocketMoneyTracker ZIP to the repository root."
+        echo "No PocketMoneyTracker ZIP found in repository root."
         exit 1
       fi
       mkdir project-src
       unzip -q "$ZIP_FILE" -d project-src
-      if [ ! -f project-src/settings.gradle ] && [ ! -f project-src/settings.gradle.kts ]; then
-        echo "ERROR: settings.gradle missing at project root."
-        find project-src -maxdepth 4 -type f | head -80
-        exit 1
-      fi
-      if [ ! -f project-src/app/build.gradle ] && [ ! -f project-src/app/build.gradle.kts ]; then
-        echo "ERROR: app/build.gradle missing."
-        exit 1
-      fi
+      test -f project-src/settings.gradle || test -f project-src/settings.gradle.kts
+      test -f project-src/app/build.gradle || test -f project-src/app/build.gradle.kts
 
-  - name: Build debug APK
+  - name: Build APK
     run: gradle --no-daemon -p project-src :app:assembleDebug
 
-  - name: Upload APK artifact
+  - name: Upload APK
     uses: actions/upload-artifact@v4
     with:
       name: PocketMoneyTracker-debug-apk
