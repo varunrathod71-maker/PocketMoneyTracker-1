@@ -1,4 +1,3 @@
-
 name: Build Pocket Money Tracker APK
 
 'on':
@@ -11,7 +10,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -25,8 +23,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
 
@@ -34,32 +32,66 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          ZIP_FILE="$(find . -maxdepth 1 -type f -iname 'PocketMoneyTracker*.zip' -print -quit)"
-
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname 'PocketMoneyTracker-Android-Project-Fixed-v2.zip' -print -quit)"
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No PocketMoneyTracker ZIP found in the repository root."
+            echo "ERROR: Upload PocketMoneyTracker-Android-Project-Fixed-v2.zip to the repository root."
             exit 1
           fi
-
           mkdir project-src
           unzip -q "$ZIP_FILE" -d project-src
-
           if [ ! -f project-src/settings.gradle ] && [ ! -f project-src/settings.gradle.kts ]; then
-            echo "ERROR: Project settings file not found."
-            find project-src -maxdepth 4 -type f | head -80
+            echo "ERROR: settings.gradle was not found at the expected location."
+            exit 1
+          fi
+          if [ ! -f project-src/app/build.gradle ] && [ ! -f project-src/app/build.gradle.kts ]; then
+            echo "ERROR: app/build.gradle was not found at the expected location."
             exit 1
           fi
 
-          if [ ! -f project-src/app/build.gradle ] && [ ! -f project-src/app/build.gradle.kts ]; then
-            echo "ERROR: App build file not found."
-            exit 1
-          fi
+      - name: Fix JSON backup checked exception
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          matches = [p for p in Path("project-src").rglob("MainActivity.java")
+                     if p.as_posix().endswith("com/stickflicks/pocketmoney/MainActivity.java")]
+          if len(matches) != 1:
+              sys.exit(f"Expected one Pocket Money Tracker MainActivity.java, found {len(matches)}")
+
+          path = matches[0]
+          source = path.read_text(encoding="utf-8")
+          old = '''    void backupJson(){JSONObject o=new JSONObject();try{o.put("transactions",txns);o.put("goals",goals);}catch(Exception e){Toast.makeText(this,"Could not prepare backup",Toast.LENGTH_SHORT).show();return;}saveDocument("Pocket Money Tracker backup.json",o.toString(2),"application/json");}'''
+          new = '''    void backupJson(){
+          JSONObject o = new JSONObject();
+          final String backupContent;
+          try {
+              o.put("transactions", txns);
+              o.put("goals", goals);
+              backupContent = o.toString(2);
+          } catch (Exception e) {
+              Toast.makeText(this, "Could not prepare backup", Toast.LENGTH_SHORT).show();
+              return;
+          }
+          saveDocument("Pocket Money Tracker backup.json", backupContent, "application/json");
+          }'''
+
+          if "backupContent = o.toString(2);" in source and 'saveDocument("Pocket Money Tracker backup.json", backupContent' in source:
+              print("JSON backup exception fix is already present.")
+          elif old in source:
+              source = source.replace(old, new, 1)
+              path.write_text(source, encoding="utf-8")
+              print(f"Patched checked JSONException in {path}")
+          else:
+              sys.exit("Source did not match the expected version; refusing to patch an unknown file.")
+          PY
 
       - name: Build debug APK
         run: gradle --no-daemon -p project-src :app:assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: PocketMoneyTracker-debug-apk
